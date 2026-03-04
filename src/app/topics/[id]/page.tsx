@@ -5,8 +5,7 @@ import { authOptions } from '@/lib/auth';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { ContentCard } from '@/components/ContentCard';
 import { TopicUploadModal } from '@/components/modals/TopicUploadModal';
-import { Play, FileText, BookOpen, PenTool } from 'lucide-react';
-import Link from 'next/link';
+import { Play, FileText, BookOpen, PenTool, AlertCircle } from 'lucide-react';
 
 async function getTopic(id: string) {
   return prisma.topic.findUnique({
@@ -38,9 +37,7 @@ export default async function TopicPage({ params }: { params: { id: string } }) 
 
   if (!topic) notFound();
 
-  const isSubscribed = session
-    ? await getUserSubscription(session.user.id)
-    : false;
+  const isSubscribed = session ? await getUserSubscription(session.user.id) : false;
 
   const { subject } = topic;
   const { degree } = subject;
@@ -49,6 +46,18 @@ export default async function TopicPage({ params }: { params: { id: string } }) 
   const videos = topic.content.filter(c => c.type === 'VIDEO');
   const notes = topic.content.filter(c => c.type === 'NOTES' || c.type === 'PDF');
   const exercises = topic.content.filter(c => c.type === 'EXERCISE_SOLUTIONS');
+
+  // Upload permission logic
+  const isAdmin = session?.user.role === 'ADMIN';
+  const isVerifiedCreator =
+    session?.user.role === 'CREATOR' &&
+    session.user.verificationStatus === 'VERIFIED' &&
+    session.user.universityId === university.id;
+  const canUpload = isAdmin || isVerifiedCreator;
+
+  // Show hint to CREATORs who are not verified for THIS university
+  const isCreatorButWrongUni =
+    session?.user.role === 'CREATOR' && !isVerifiedCreator && !isAdmin;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
@@ -68,17 +77,28 @@ export default async function TopicPage({ params }: { params: { id: string } }) 
             <p className="text-gray-600 mt-3 max-w-2xl">{topic.description}</p>
           )}
         </div>
-        {session && (session.user.role === 'CREATOR' || session.user.role === 'ADMIN') && (
+        {canUpload && (
           <div className="shrink-0">
             <TopicUploadModal topicId={topic.id} topicName={topic.name} />
           </div>
         )}
       </div>
 
+      {/* Hint for creators not verified for this university */}
+      {isCreatorButWrongUni && (
+        <div className="mb-6 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          <p>
+            You are not verified as a creator for <strong>{university.name}</strong>.
+            You can only upload content to your verified university.
+          </p>
+        </div>
+      )}
+
       {topic.content.length === 0 ? (
         <div className="text-center py-16 card">
           <p className="text-gray-500 text-lg">No content yet for this topic</p>
-          {session && (session.user.role === 'CREATOR' || session.user.role === 'ADMIN') && (
+          {canUpload && (
             <div className="mt-4 flex justify-center">
               <TopicUploadModal topicId={topic.id} topicName={topic.name} />
             </div>

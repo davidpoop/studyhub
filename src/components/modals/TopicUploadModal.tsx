@@ -5,14 +5,26 @@ import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
-import { Upload, File, X, CheckCircle, Play, FileText } from 'lucide-react';
+import { Upload, File, X, CheckCircle, Play, FileText, BookOpen } from 'lucide-react';
 
-type UploadMode = 'VIDEO' | 'EXERCISE_SOLUTIONS';
+type UploadMode = 'VIDEO' | 'NOTES' | 'EXERCISE_SOLUTIONS';
 
 interface TopicUploadModalProps {
   topicId: string;
   topicName: string;
 }
+
+const MODES: { value: UploadMode; label: string; icon: React.ElementType; color: string }[] = [
+  { value: 'VIDEO', label: 'Exercise video', icon: Play, color: 'red' },
+  { value: 'NOTES', label: 'Notes PDF', icon: BookOpen, color: 'blue' },
+  { value: 'EXERCISE_SOLUTIONS', label: 'Solutions PDF', icon: FileText, color: 'green' },
+];
+
+const activeColors: Record<string, string> = {
+  red: 'bg-red-50 border-red-300 text-red-700',
+  blue: 'bg-blue-50 border-blue-300 text-blue-700',
+  green: 'bg-green-50 border-green-300 text-green-700',
+};
 
 export function TopicUploadModal({ topicId, topicName }: TopicUploadModalProps) {
   const router = useRouter();
@@ -60,20 +72,13 @@ export function TopicUploadModal({ topicId, topicName }: TopicUploadModalProps) 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) {
-      toast.error('Please select a file');
-      return;
-    }
-    if (!title.trim()) {
-      toast.error('Please enter a title');
-      return;
-    }
+    if (!file) { toast.error('Please select a file'); return; }
+    if (!title.trim()) { toast.error('Please enter a title'); return; }
 
     setUploading(true);
     setProgress(0);
 
     try {
-      // 1. Create content record
       const contentRes = await fetch('/api/content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -91,20 +96,14 @@ export function TopicUploadModal({ topicId, topicName }: TopicUploadModalProps) 
       }
       const content = await contentRes.json();
 
-      // 2. Get presigned URL
       const presignedRes = await fetch('/api/upload/presigned', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type,
-          contentId: content.id,
-        }),
+        body: JSON.stringify({ filename: file.name, contentType: file.type, contentId: content.id }),
       });
       if (!presignedRes.ok) throw new Error('Failed to get upload URL');
       const { presignedUrl, key, isVideo: isVid } = await presignedRes.json();
 
-      // 3. Upload directly to R2
       await axios.put(presignedUrl, file, {
         headers: { 'Content-Type': file.type },
         onUploadProgress: (ev) => {
@@ -112,7 +111,6 @@ export function TopicUploadModal({ topicId, topicName }: TopicUploadModalProps) 
         },
       });
 
-      // 4. Notify backend
       const completeRes = await fetch('/api/upload/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -122,10 +120,7 @@ export function TopicUploadModal({ topicId, topicName }: TopicUploadModalProps) 
 
       setDone(true);
       toast.success('Upload successful! Content is under review.');
-      setTimeout(() => {
-        router.refresh();
-        handleClose();
-      }, 2000);
+      setTimeout(() => { router.refresh(); handleClose(); }, 2000);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Upload failed');
     } finally {
@@ -133,12 +128,11 @@ export function TopicUploadModal({ topicId, topicName }: TopicUploadModalProps) 
     }
   };
 
+  const currentMode = MODES.find(m => m.value === mode)!;
+
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="btn-primary flex items-center gap-2 text-sm"
-      >
+      <button onClick={() => setOpen(true)} className="btn-primary flex items-center gap-2 text-sm">
         <Upload className="w-4 h-4" /> Upload content
       </button>
 
@@ -167,28 +161,20 @@ export function TopicUploadModal({ topicId, topicName }: TopicUploadModalProps) 
                 <form onSubmit={handleSubmit} className="space-y-5">
                   {/* Mode tabs */}
                   <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleModeChange('VIDEO')}
-                      className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-                        mode === 'VIDEO'
-                          ? 'bg-red-50 border-red-300 text-red-700'
-                          : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Play className="w-4 h-4" /> Exercise video
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleModeChange('EXERCISE_SOLUTIONS')}
-                      className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-                        mode === 'EXERCISE_SOLUTIONS'
-                          ? 'bg-green-50 border-green-300 text-green-700'
-                          : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <FileText className="w-4 h-4" /> Solutions PDF
-                    </button>
+                    {MODES.map(({ value, label, icon: Icon, color }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => handleModeChange(value)}
+                        className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border text-xs font-medium transition-colors ${
+                          mode === value
+                            ? activeColors[color]
+                            : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" /> {label}
+                      </button>
+                    ))}
                   </div>
 
                   {/* Title */}
@@ -200,9 +186,9 @@ export function TopicUploadModal({ topicId, topicName }: TopicUploadModalProps) 
                       value={title}
                       onChange={e => setTitle(e.target.value)}
                       placeholder={
-                        isVideo
-                          ? 'e.g. Exercise 3 – Vector fields walkthrough'
-                          : 'e.g. Problem set 2 – Solved'
+                        isVideo ? 'e.g. Exercise 3 – step-by-step walkthrough'
+                        : mode === 'NOTES' ? 'e.g. Lecture notes – Topic 2'
+                        : 'e.g. Problem set 2 – Solved'
                       }
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                     />
@@ -217,7 +203,6 @@ export function TopicUploadModal({ topicId, topicName }: TopicUploadModalProps) 
                       value={description}
                       onChange={e => setDescription(e.target.value)}
                       rows={2}
-                      placeholder="Brief description..."
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                     />
                   </div>
@@ -230,9 +215,7 @@ export function TopicUploadModal({ topicId, topicName }: TopicUploadModalProps) 
                     <div
                       {...getRootProps()}
                       className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
-                        isDragActive
-                          ? 'border-blue-400 bg-blue-50'
-                          : 'border-gray-300 hover:border-gray-400'
+                        isDragActive ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
                       }`}
                     >
                       <input {...getInputProps()} />
@@ -250,7 +233,7 @@ export function TopicUploadModal({ topicId, topicName }: TopicUploadModalProps) 
                         </div>
                       ) : (
                         <div>
-                          <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                          <currentMode.icon className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                           <p className="text-sm text-gray-600 font-medium">
                             {isDragActive ? 'Drop here' : 'Drag & drop or click to select'}
                           </p>
@@ -279,19 +262,10 @@ export function TopicUploadModal({ topicId, topicName }: TopicUploadModalProps) 
                   )}
 
                   <div className="flex gap-3 pt-1">
-                    <button
-                      type="button"
-                      onClick={handleClose}
-                      disabled={uploading}
-                      className="btn-secondary flex-1"
-                    >
+                    <button type="button" onClick={handleClose} disabled={uploading} className="btn-secondary flex-1">
                       Cancel
                     </button>
-                    <button
-                      type="submit"
-                      disabled={uploading || !file}
-                      className="btn-primary flex-1"
-                    >
+                    <button type="submit" disabled={uploading || !file} className="btn-primary flex-1">
                       {uploading ? 'Uploading...' : 'Upload'}
                     </button>
                   </div>

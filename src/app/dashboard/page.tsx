@@ -3,14 +3,14 @@ import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
-import { Upload, Eye, Crown, Users, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { Upload, Eye, Crown, Users, CheckCircle, Clock, XCircle, GraduationCap } from 'lucide-react';
 import { cn, formatViews } from '@/lib/utils';
-import { UpgradeButton } from '@/components/UpgradeButton';
+import { CreatorApplicationForm } from '@/components/CreatorApplicationForm';
 import { StripeCheckoutButton } from '@/components/StripeCheckoutButton';
 
 async function getDashboardData(userId: string, role: string) {
   if (role === 'CREATOR' || role === 'ADMIN') {
-    const myContent = await prisma.content.findMany({
+    return prisma.content.findMany({
       where: { creatorId: userId },
       include: {
         topic: {
@@ -19,7 +19,6 @@ async function getDashboardData(userId: string, role: string) {
       },
       orderBy: { createdAt: 'desc' },
     });
-    return myContent;
   }
   return [];
 }
@@ -28,6 +27,17 @@ async function getSubscription(userId: string) {
   return prisma.subscription.findUnique({
     where: { userId },
     select: { status: true, currentPeriodEnd: true },
+  });
+}
+
+async function getUserDetails(userId: string) {
+  return prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      verificationStatus: true,
+      verificationDegree: true,
+      memberUniversity: { select: { name: true } },
+    },
   });
 }
 
@@ -42,13 +52,15 @@ export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
 
-  const [myContent, subscription] = await Promise.all([
+  const [myContent, subscription, userDetails] = await Promise.all([
     getDashboardData(session.user.id, session.user.role),
     getSubscription(session.user.id),
+    getUserDetails(session.user.id),
   ]);
 
   const isSubscribed = subscription?.status === 'ACTIVE';
   const totalViews = myContent.reduce((sum, c) => sum + c.views, 0);
+  const verificationStatus = userDetails?.verificationStatus ?? 'NONE';
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
@@ -96,7 +108,21 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Role upgrade */}
+      {/* Creator status for verified CREATORs */}
+      {session.user.role === 'CREATOR' && userDetails?.memberUniversity && (
+        <div className="card p-5 mb-8 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+          <div className="flex items-center gap-2 text-green-800">
+            <GraduationCap className="w-5 h-5" />
+            <p className="font-semibold">Verified creator</p>
+          </div>
+          <p className="text-sm text-green-700 mt-1">
+            {userDetails.memberUniversity.name}
+            {userDetails.verificationDegree && ` · ${userDetails.verificationDegree}`}
+          </p>
+        </div>
+      )}
+
+      {/* Creator application for USERs */}
       {session.user.role === 'USER' && (
         <div className="card p-6 mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
           <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
@@ -104,9 +130,9 @@ export default async function DashboardPage() {
             Become a Creator
           </h3>
           <p className="text-sm text-gray-600 mb-4">
-            Upload videos, notes, and study materials to help students at your university.
+            Apply to upload study materials for your university. An admin will verify your credentials.
           </p>
-          <UpgradeButton />
+          <CreatorApplicationForm verificationStatus={verificationStatus} />
         </div>
       )}
 

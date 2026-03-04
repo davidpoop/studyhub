@@ -17,9 +17,37 @@ export async function POST(req: NextRequest) {
   const parsed = createContentSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  // Verify topic exists
-  const topic = await prisma.topic.findUnique({ where: { id: parsed.data.topicId } });
+  // Verify topic exists and fetch its university
+  const topic = await prisma.topic.findUnique({
+    where: { id: parsed.data.topicId },
+    include: {
+      subject: { include: { degree: { select: { universityId: true } } } },
+    },
+  });
   if (!topic) return NextResponse.json({ error: 'Topic not found' }, { status: 404 });
+
+  // CREATORs must be verified for the topic's university
+  if (role === 'CREATOR') {
+    const dbUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { verificationStatus: true, universityId: true },
+    });
+
+    if (dbUser?.verificationStatus !== 'VERIFIED') {
+      return NextResponse.json(
+        { error: 'Your creator application must be verified before uploading' },
+        { status: 403 },
+      );
+    }
+
+    const topicUniversityId = topic.subject.degree.universityId;
+    if (dbUser.universityId !== topicUniversityId) {
+      return NextResponse.json(
+        { error: 'You can only upload content for your verified university' },
+        { status: 403 },
+      );
+    }
+  }
 
   const content = await prisma.content.create({
     data: {
@@ -41,7 +69,6 @@ export async function GET(req: NextRequest) {
   const where: Record<string, unknown> = {};
 
   if (creatorId) {
-    // Only creator can see their own unpublished content
     if (session?.user.id === creatorId || session?.user.role === 'ADMIN') {
       where.creatorId = creatorId;
     } else {
