@@ -6,6 +6,8 @@ import { getPublicUrl } from '@/lib/r2';
 import { createMuxAsset } from '@/lib/mux';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const completeSchema = z.object({
   contentId: z.string().cuid(),
   key: z.string().min(1),

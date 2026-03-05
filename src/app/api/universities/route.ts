@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { createUniversitySchema } from '@/lib/validations';
 import { slugify } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get('q') || '';

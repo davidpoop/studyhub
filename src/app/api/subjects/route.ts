@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { createSubjectSchema } from '@/lib/validations';
 import { slugify } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

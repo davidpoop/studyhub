@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const applicationSchema = z.object({
   universityId: z.string().cuid(),
   verificationDegree: z.string().min(2).max(200),
